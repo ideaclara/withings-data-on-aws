@@ -1,0 +1,43 @@
+// lib/stacks/cicd-pipeline-stack.ts
+import * as cdk from 'aws-cdk-lib';
+import * as pipelines from 'aws-cdk-lib/pipelines';
+import { Construct } from 'constructs';
+import { TelemetryPipelineAppStage } from '../stages/pipeline-stage';
+
+interface CicdPipelineStackProps extends cdk.StackProps {
+  connectionArn: string;
+}
+
+export class CicdPipelineStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props: CicdPipelineStackProps) {
+    super(scope, id, props);
+
+    const pipeline = new pipelines.CodePipeline(this, 'Pipeline', {
+      pipelineName: 'WithingsTelemetry-CicdPipeline',
+      selfMutation: true,
+      synth: new pipelines.ShellStep('Synth', {
+        input: pipelines.CodePipelineSource.connection(
+          'ideaclara/withings-data-on-aws',
+          'main',
+          {
+            connectionArn: props.connectionArn,
+          }
+        ),
+        commands: [
+          'npm ci',
+          'npx cdk synth',
+        ],
+      }),
+    });
+
+    // Deploy to London (eu-west-2)
+    const prodStage = new TelemetryPipelineAppStage(this, 'Prod', {
+      env: {
+        account: process.env.CDK_DEFAULT_ACCOUNT,
+        region: 'eu-west-2',
+      },
+    });
+
+    pipeline.addStage(prodStage);
+  }
+}

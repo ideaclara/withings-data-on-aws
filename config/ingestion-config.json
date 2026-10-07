@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "providers": {
+    "withings": {
+      "secret_name": "prod/withings/credentials",
+      "token_refresh_url": "https://wbsapi.withings.net/v2/oauth2",
+      "endpoints": {
+        "measures": {
+          "enabled": true,
+          "cadence_minutes": 60,
+          "url": "https://wbsapi.withings.net/measure",
+          "action": "getmeas",
+          "category": 1
+        },
+        "activity": {
+          "enabled": true,
+          "cadence_minutes": 180,
+          "url": "https://wbsapi.withings.net/v2/measure",
+          "action": "getactivity",
+          "lookback_days": 3,
+          "data_fields": "steps,distance,elevation,soft,moderate,intense,active,calories,totalcalories,hr_average,hr_min,hr_max"
+        },
+        "sleep": {
+          "enabled": true,
+          "cadence_minutes": 720,
+          "url": "https://wbsapi.withings.net/v2/sleep",
+          "action": "getsummary",
+          "lookback_days": 7,
+          "data_fields": "total_timeinbed,total_sleep_time,asleepduration,lightsleepduration,remsleepduration,deepsleepduration,sleep_efficiency,sleep_score,hr_average"
+        }
+      }
+    }
+  }
+}
