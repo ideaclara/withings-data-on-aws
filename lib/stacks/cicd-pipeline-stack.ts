@@ -1,6 +1,7 @@
 // lib/stacks/cicd-pipeline-stack.ts
 import * as cdk from 'aws-cdk-lib';
 import * as pipelines from 'aws-cdk-lib/pipelines';
+import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import { Construct } from 'constructs';
 import { TelemetryPipelineAppStage } from '../stages/pipeline-stage';
 
@@ -24,10 +25,19 @@ export class CicdPipelineStack extends cdk.Stack {
           }
         ),
         commands: [
-          'npm ci',
+          'node -v',
+          'npm ci || npm install',
           'npx cdk synth',
         ],
       }),
+      codeBuildDefaults: {
+        buildEnvironment: {
+          buildImage: codebuild.LinuxBuildImage.STANDARD_7_0, // Standard 7.0 supports Node 18, 20, 22
+          environmentVariables: {
+            NODE_VERSION: { value: '22' },
+          },
+        },
+      },
     });
 
     // Deploy to London (eu-west-2)
