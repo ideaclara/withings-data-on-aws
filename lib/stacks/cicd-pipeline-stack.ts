@@ -24,7 +24,6 @@ export class CicdPipelineStack extends cdk.Stack {
           }
         ),
         installCommands: [
-          'nvm use 20 || nvm install 20',
           'node -v',
           'npm install',
         ],
