@@ -28,7 +28,6 @@ export class IngestionPipelineStack extends cdk.Stack {
     const env = new appconfig.CfnEnvironment(this, 'TelemetryAppConfigEnv', {
       applicationId: app.ref,
       name: 'production',
-      deletionProtectionCheck: 'ACCOUNT_DEFAULT',
     });
 
     const configPath = path.join(__dirname, '../../config/ingestion-config.json');
@@ -50,7 +49,6 @@ export class IngestionPipelineStack extends cdk.Stack {
       applicationId: app.ref,
       name: 'IngestionSchedules',
       locationUri: 'hosted',
-      deletionProtectionCheck: 'ACCOUNT_DEFAULT',
     });
 
     const hostedVersion = new appconfig.CfnHostedConfigurationVersion(this, 'TelemetryHostedVer', {
