@@ -24,7 +24,7 @@ export class CicdPipelineStack extends cdk.Stack {
           }
         ),
         commands: [
-          'npm ci || npm install',
+          'npm ci',
           'npx cdk synth -q',
         ],
       }),
