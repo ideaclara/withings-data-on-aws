@@ -28,19 +28,29 @@ export class IngestionPipelineStack extends cdk.Stack {
     const env = new appconfig.CfnEnvironment(this, 'TelemetryAppConfigEnv', {
       applicationId: app.ref,
       name: 'production',
-      deletionProtectionCheck: 'BYPASS',
+      deletionProtectionCheck: 'ACCOUNT_DEFAULT',
     });
 
-    const configContent = fs.readFileSync(
-      path.join(__dirname, '../../config/ingestion-config.json'),
-      'utf-8'
-    );
+    const configPath = path.join(__dirname, '../../config/ingestion-config.json');
+    const configContent = fs.existsSync(configPath)
+      ? fs.readFileSync(configPath, 'utf-8')
+      : JSON.stringify({
+          version: '1.0.0',
+          providers: {
+            withings: {
+              secret_name: secretName,
+              endpoints: {
+                measures: { path: '/measure', action: 'getmeas', cadence_minutes: 30, category: 1 }
+              }
+            }
+          }
+        });
 
     const configProfile = new appconfig.CfnConfigurationProfile(this, 'TelemetryProfile', {
       applicationId: app.ref,
       name: 'IngestionSchedules',
       locationUri: 'hosted',
-      deletionProtectionCheck: 'BYPASS',
+      deletionProtectionCheck: 'ACCOUNT_DEFAULT',
     });
 
     const hostedVersion = new appconfig.CfnHostedConfigurationVersion(this, 'TelemetryHostedVer', {
@@ -77,7 +87,7 @@ export class IngestionPipelineStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(60),
       environment: { TABLE_NAME: ddb.table.tableName },
     });
-    ddb.table.grantReadWriteData(routerSyncFn);
+    ddb.table.grantWriteData(routerSyncFn);
 
     // 4. Parameterized Step Functions State Machine
     const refreshTokenTask = new tasks.LambdaInvoke(this, 'ValidateOrRefreshTokensTask', {
@@ -113,7 +123,7 @@ export class IngestionPipelineStack extends cdk.Stack {
       stateMachineType: sfn.StateMachineType.STANDARD,
     });
 
-    // 5. Dispatcher Lambda (Native AppConfig SDK client)
+    // 5. Dispatcher Lambda
     const dispatcherFn = new lambda.Function(this, 'DispatcherFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       code: lambda.Code.fromAsset('src/lambda/dispatcher'),
