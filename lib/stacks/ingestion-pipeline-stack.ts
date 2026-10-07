@@ -28,6 +28,7 @@ export class IngestionPipelineStack extends cdk.Stack {
     const env = new appconfig.CfnEnvironment(this, 'TelemetryAppConfigEnv', {
       applicationId: app.ref,
       name: 'production',
+      deletionProtectionCheck: 'BYPASS',
     });
 
     const configContent = fs.readFileSync(
@@ -39,6 +40,7 @@ export class IngestionPipelineStack extends cdk.Stack {
       applicationId: app.ref,
       name: 'IngestionSchedules',
       locationUri: 'hosted',
+      deletionProtectionCheck: 'BYPASS',
     });
 
     const hostedVersion = new appconfig.CfnHostedConfigurationVersion(this, 'TelemetryHostedVer', {
@@ -75,7 +77,7 @@ export class IngestionPipelineStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(60),
       environment: { TABLE_NAME: ddb.table.tableName },
     });
-    ddb.table.grantWriteData(routerSyncFn);
+    ddb.table.grantReadWriteData(routerSyncFn);
 
     // 4. Parameterized Step Functions State Machine
     const refreshTokenTask = new tasks.LambdaInvoke(this, 'ValidateOrRefreshTokensTask', {
@@ -111,7 +113,7 @@ export class IngestionPipelineStack extends cdk.Stack {
       stateMachineType: sfn.StateMachineType.STANDARD,
     });
 
-    // 5. Dispatcher Lambda (Native AppConfig SDK client, no external Layer)
+    // 5. Dispatcher Lambda (Native AppConfig SDK client)
     const dispatcherFn = new lambda.Function(this, 'DispatcherFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       code: lambda.Code.fromAsset('src/lambda/dispatcher'),

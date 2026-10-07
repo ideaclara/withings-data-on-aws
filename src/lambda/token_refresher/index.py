@@ -5,46 +5,47 @@ import urllib.parse
 import urllib.request
 import boto3
 
-SECRET_NAME = os.environ["SECRET_NAME"]
-TOKEN_URL = "https://wbsapi.withings.net/v2/oauth2"
-sm_client = boto3.client("secretsmanager")
+secrets_client = boto3.client('secretsmanager')
 
 def handler(event, context):
-    secret_record = sm_client.get_secret_value(SecretId=SECRET_NAME)
-    creds = json.loads(secret_record["SecretString"])
+    secret_name = event.get('secret_name') or os.environ.get('SECRET_NAME')
+    secret_resp = secrets_client.get_secret_value(SecretId=secret_name)
+    credentials = json.loads(secret_resp['SecretString'])
 
-    now = int(time.time())
-    expires_at = creds.get("expires_at", 0)
+    current_time = int(time.time())
+    expires_at = int(credentials.get('expires_at', 0))
 
-    # Refresh proactively if expiring within 10 minutes (Withings access tokens expire in 10800s)
-    if now + 600 >= expires_at:
-        payload = {
-            "action": "requesttoken",
-            "grant_type": "refresh_token",
-            "client_id": creds["client_id"],
-            "client_secret": creds["client_secret"],
-            "refresh_token": creds["refresh_token"],
-        }
-        encoded = urllib.parse.urlencode(payload).encode("utf-8")
-        req = urllib.request.Request(TOKEN_URL, data=encoded, method="POST")
+    # Refresh if within 5 minutes of expiration
+    if current_time >= (expires_at - 300):
+        url = "https://wbsapi.withings.net/v2/oauth2"
+        data = urllib.parse.urlencode({
+            'action': 'requesttoken',
+            'grant_type': 'refresh_token',
+            'client_id': credentials['client_id'],
+            'client_secret': credentials['client_secret'],
+            'refresh_token': credentials['refresh_token']
+        }).encode('utf-8')
+
+        req = urllib.request.Request(url, data=data, method='POST')
         with urllib.request.urlopen(req) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-            if body.get("status") != 0:
-                raise RuntimeError(f"Refresh failed: {body}")
-            tokens = body["body"]
+            body = json.loads(resp.read().decode('utf-8'))
 
-        creds["access_token"] = tokens["access_token"]
-        creds["refresh_token"] = tokens["refresh_token"]
-        creds["expires_at"] = now + int(tokens["expires_in"])
-        creds["userid"] = str(tokens["userid"])
+        if body.get('status') != 0:
+            raise RuntimeError(f"Withings token refresh error: {body}")
 
-        sm_client.put_secret_value(
-            SecretId=SECRET_NAME,
-            SecretString=json.dumps(creds),
+        token_data = body['body']
+        credentials['access_token'] = token_data['access_token']
+        credentials['refresh_token'] = token_data['refresh_token']
+        credentials['expires_at'] = current_time + int(token_data.get('expires_in', 10800))
+        if 'userid' in token_data:
+            credentials['userid'] = str(token_data['userid'])
+
+        secrets_client.put_secret_value(
+            SecretId=secret_name,
+            SecretString=json.dumps(credentials)
         )
 
     return {
-        "status": "VALID",
-        "access_token": creds["access_token"],
-        "userid": creds["userid"],
+        'access_token': credentials['access_token'],
+        'userid': str(credentials.get('userid', ''))
     }

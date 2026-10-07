@@ -3,85 +3,61 @@ import os
 import time
 import boto3
 
-APP_NAME = os.environ["APPCONFIG_APP"]
-ENV_NAME = os.environ["APPCONFIG_ENV"]
-CONF_NAME = os.environ["APPCONFIG_CONF"]
-TABLE_NAME = os.environ["TABLE_NAME"]
-STATE_MACHINE_ARN = os.environ["STATE_MACHINE_ARN"]
-
-appconfig_data = boto3.client("appconfigdata")
-dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(TABLE_NAME)
-sfn_client = boto3.client("stepfunctions")
-
-def get_appconfig() -> dict:
-    """Retrieves active configuration document via AppConfigData session."""
-    session = appconfig_data.start_configuration_session(
-        ApplicationIdentifier=APP_NAME,
-        EnvironmentIdentifier=ENV_NAME,
-        ConfigurationProfileIdentifier=CONF_NAME,
-        RequiredMinimumPollIntervalInSeconds=60,
-    )
-    token = session["InitialConfigurationToken"]
-    response = appconfig_data.get_latest_configuration(
-        ConfigurationToken=token
-    )
-    raw_payload = response["Configuration"].read().decode("utf-8")
-    return json.loads(raw_payload)
+appconfig_client = boto3.client('appconfigdata')
+ddb_client = boto3.client('dynamodb')
+sfn_client = boto3.client('stepfunctions')
 
 def handler(event, context):
-    config = get_appconfig()
-    now = int(time.time())
+    app = os.environ['APPCONFIG_APP']
+    env = os.environ['APPCONFIG_ENV']
+    conf = os.environ['APPCONFIG_CONF']
+    table_name = os.environ['TABLE_NAME']
+    state_machine_arn = os.environ['STATE_MACHINE_ARN']
+
+    session_resp = appconfig_client.start_configuration_session(
+        ApplicationIdentifier=app,
+        EnvironmentIdentifier=env,
+        ConfigurationProfileIdentifier=conf
+    )
+    config_resp = appconfig_client.get_latest_configuration(
+        ConfigurationToken=session_resp['InitialConfigurationToken']
+    )
+    config = json.loads(config_resp['Configuration'].read().decode('utf-8'))
+
+    current_time = int(time.time())
     dispatched = []
 
-    for provider, pdata in config.get("providers", {}).items():
-        endpoints = pdata.get("endpoints", {})
-        secret_name = pdata.get("secret_name")
-        refresh_url = pdata.get("token_refresh_url")
+    for provider, provider_data in config.get('providers', {}).items():
+        secret_name = provider_data['secret_name']
+        for endpoint_key, endpoint_cfg in provider_data.get('endpoints', {}).items():
+            cadence_sec = endpoint_cfg.get('cadence_minutes', 60) * 60
+            pk = "CONFIG#INGESTION"
+            sk = f"CHECKPOINT#{provider.upper()}#{endpoint_key.upper()}"
 
-        for ep_name, ep_conf in endpoints.items():
-            if not ep_conf.get("enabled", False):
-                continue
-
-            cadence_seconds = ep_conf.get("cadence_minutes", 60) * 60
-            sk_key = f"STATE#{provider}#{ep_name}"
-
-            # Query high-water mark control item in DynamoDB
-            res = table.get_item(
-                Key={"PK": "CONFIG#INGESTION", "SK": sk_key}
+            chk_resp = ddb_client.get_item(
+                TableName=table_name,
+                Key={'PK': {'S': pk}, 'SK': {'S': sk}}
             )
-            last_run = res.get("Item", {}).get("last_executed_at", 0)
+            last_run = int(chk_resp['Item']['last_run_timestamp']['N']) if 'Item' in chk_resp else 0
 
-            # Evaluate cadence interval
-            if (now - last_run) >= cadence_seconds:
+            if current_time - last_run >= cadence_sec:
                 payload = {
                     "provider": provider,
-                    "endpoint": ep_name,
+                    "endpoint": endpoint_key,
                     "secret_name": secret_name,
-                    "refresh_url": refresh_url,
-                    "endpoint_config": ep_conf,
-                    "dispatched_at": now
+                    "endpoint_config": endpoint_cfg
                 }
-
-                exec_name = f"{provider}-{ep_name}-{now}"
                 sfn_client.start_execution(
-                    stateMachineArn=STATE_MACHINE_ARN,
-                    name=exec_name,
+                    stateMachineArn=state_machine_arn,
+                    name=f"{provider}-{endpoint_key}-{current_time}",
                     input=json.dumps(payload)
                 )
-
-                # Atomically update high-water mark
-                table.put_item(
-                    Item={
-                        "PK": "CONFIG#INGESTION",
-                        "SK": sk_key,
-                        "last_executed_at": now,
-                        "status": "DISPATCHED"
-                    }
+                ddb_client.update_item(
+                    TableName=table_name,
+                    Key={'PK': {'S': pk}, 'SK': {'S': sk}},
+                    UpdateExpression="SET last_run_timestamp = :now",
+                    ExpressionAttributeValues={':now': {'N': str(current_time)}}
                 )
-                dispatched.append(f"{provider}:{ep_name}")
+                dispatched.append(f"{provider}:{endpoint_key}")
 
-    return {
-        "statusCode": 200,
-        "dispatched": dispatched
-    }
+    return {"statusCode": 200, "dispatched": dispatched}
