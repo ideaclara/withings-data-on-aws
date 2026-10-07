@@ -1,4 +1,3 @@
-// lib/stages/pipeline-stage.ts
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { IngestionPipelineStack } from '../stacks/ingestion-pipeline-stack';

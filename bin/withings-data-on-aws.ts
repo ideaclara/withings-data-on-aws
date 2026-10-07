@@ -11,11 +11,14 @@ const env = {
   region: 'eu-west-2',
 };
 
-// 1. Direct Stack (for rapid local developer iteration)
+// 1. Direct Stack (for rapid local developer iteration & direct diffing)
 new IngestionPipelineStack(app, 'WithingsIngestionPipelineStack', { env });
 
 // 2. CI/CD Self-Mutating Pipeline
-const connectionArn = process.env.GITHUB_CONNECTION_ARN || 'arn:aws:codeconnections:eu-west-2:022074716478:connection/9936e281-8295-4c57-8509-ef059fee208a';
+const connectionArn =
+  process.env.GITHUB_CONNECTION_ARN ||
+  'arn:aws:codeconnections:eu-west-2:022074716478:connection/9936e281-8295-4c57-8509-ef059fee208a';
+
 new CicdPipelineStack(app, 'WithingsCicdPipelineStack', {
   env,
   connectionArn,

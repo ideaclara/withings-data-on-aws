@@ -1,4 +1,3 @@
-// lib/stacks/cicd-pipeline-stack.ts
 import * as cdk from 'aws-cdk-lib';
 import * as pipelines from 'aws-cdk-lib/pipelines';
 import * as codebuild from 'aws-cdk-lib/aws-codebuild';
@@ -25,25 +24,24 @@ export class CicdPipelineStack extends cdk.Stack {
           }
         ),
         commands: [
-          'node -v',
           'npm ci || npm install',
-          'npx cdk synth',
+          'npx cdk synth -q',
         ],
       }),
       codeBuildDefaults: {
         buildEnvironment: {
-          buildImage: codebuild.LinuxBuildImage.STANDARD_7_0, // Standard 7.0 supports Node 18, 20, 22
+          buildImage: codebuild.LinuxBuildImage.STANDARD_7_0,
           environmentVariables: {
-            NODE_VERSION: { value: '22' },
+            CDK_DEFAULT_ACCOUNT: { value: '022074716478' },
+            CDK_DEFAULT_REGION: { value: 'eu-west-2' },
           },
         },
       },
     });
 
-    // Deploy to London (eu-west-2)
     const prodStage = new TelemetryPipelineAppStage(this, 'Prod', {
       env: {
-        account: process.env.CDK_DEFAULT_ACCOUNT,
+        account: '022074716478',
         region: 'eu-west-2',
       },
     });
