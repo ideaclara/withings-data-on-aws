@@ -23,11 +23,9 @@ export class CicdPipelineStack extends cdk.Stack {
             connectionArn: props.connectionArn,
           }
         ),
-        installCommands: [
+        commands: [
           'node -v',
           'npm install',
-        ],
-        commands: [
           'npx cdk synth -q',
         ],
       }),
